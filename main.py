@@ -1,23 +1,68 @@
 import dns.resolver
 import csv
+import traceback
 
 
-def resolve(resolver, domain):
-    return resolver.query(domain)
+NS_QUERY = "NS"
 
-def main():
+
+class AAnswer:
+    def __init__(self, name, ip_addr):
+        self.name = name
+        self.ip_addr = ip_addr
+
+
+class NSAnswer:
+    def __init__(self, domain, name_servers, glue_records):
+        self.domain = domain
+        self.name_servers = name_servers
+        self.glue_records = glue_records
+
+
+def parse_a_record(a_record):
+    name = a_record.name.to_text()
+    ipAddr = a_record.items[0].to_text()
+    return AAnswer(name, ipAddr)
+
+
+def parse_answer(domain, answer):
+    nameservers = [entry.to_text() for entry in answer]
+    glue_records = [parse_a_record(a_record) for a_record in answer.response.additional]
+    return NSAnswer(domain, nameservers, glue_records)
+
+
+def query_domains(domains):
     resolver = dns.resolver.Resolver()
     # use this when running from resolver
     #resolver.nameservers = ["127.0.0.1"]
-
     answers = []
-    with open(r"majestic_million.csv", "r", encoding='UTF-8') as domains_file:
+    for domain in domains:
+        try:
+            answer = resolver.query(domain, NS_QUERY)
+            answers.append(parse_answer(domain, answer))
+        except Exception as e:
+            traceback.print_exc()
+            print("FAILED TO QUERY DOMAIN " + domain + " ERROR: " + str(e))
+
+    return answers
+
+def parse_domains_file(file_path):
+    domains = []
+    with open(file_path, "r", encoding='UTF-8') as domains_file:
         next(domains_file)
         reader = csv.reader(domains_file)
         for domain_entry in reader:
-            domain = domain_entry[2]
-            answers.append(resolver.query(domain))
+            try:
+                domains.append(domain_entry[2])
+            except Exception as e:
+                continue
+    return domains
 
+
+def main():
+    domains = ["google.com", "facebook.com", "microsoft.com"]
+    answers = query_domains(domains)
+    print("done")
 
 
 if __name__ == '__main__':
