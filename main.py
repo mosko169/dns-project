@@ -11,12 +11,23 @@ class AAnswer:
         self.name = name
         self.ip_addr = ip_addr
 
+    def __str__(self):
+        return "name: " + self.name + " ip: " + self.ip_addr
+
 
 class NSAnswer:
     def __init__(self, domain, name_servers, glue_records):
         self.domain = domain
         self.name_servers = name_servers
         self.glue_records = glue_records
+
+    def __str__(self):
+        answer_str = "domain: " + self.domain
+        answer_str += "\nname servers: \n"
+        answer_str += '\n'.join(self.name_servers)
+        answer_str += "\nglue records: \n"
+        answer_str+= '\n'.join([str(glue_record) for glue_record in self.glue_records])
+        return answer_str
 
 
 def parse_a_record(a_record):
@@ -62,8 +73,9 @@ def parse_domains_file(file_path):
 def main():
     domains = ["google.com", "facebook.com", "microsoft.com"]
     answers = query_domains(domains)
-    print("done")
-
+    for answer in answers:
+        print("************\n\n")
+        print(answer)
 
 if __name__ == '__main__':
     main()
