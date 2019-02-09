@@ -1,6 +1,5 @@
 import dns.resolver
 import csv
-import traceback
 import argparse
 import threading
 
@@ -19,18 +18,20 @@ class AAnswer:
 
 
 class NSAnswer:
-    def __init__(self, domain, name_servers, glue_records, out_of_bailiwick_glue_records):
+    def __init__(self, domain, name_servers, glue_records_v4, glue_records_v6, out_of_bailiwick_glue_records_v4, out_of_bailiwick_glue_records_v6):
         self.domain = domain
         self.name_servers = name_servers
-        self.glue_records = glue_records
-        self.out_of_bailiwick_glue_records = out_of_bailiwick_glue_records
+        self.glue_records_v4 = glue_records_v4
+        self.glue_records_v6 = glue_records_v6
+        self.out_of_bailiwick_glue_records_v4 = out_of_bailiwick_glue_records_v4
+        self.out_of_bailiwick_glue_records_v6 = out_of_bailiwick_glue_records_v6
 
     def __str__(self):
         answer_str = "domain: " + self.domain
         answer_str += "\nname servers: \n"
         answer_str += '\n'.join(self.name_servers)
         answer_str += "\nglue records: \n"
-        answer_str+= '\n'.join([str(glue_record) for glue_record in self.glue_records])
+        answer_str+= '\n'.join([str(glue_record) for glue_record in self.glue_records_v4])
         answer_str += "\nout of bailiwick glue records: \n"
         answer_str+= '\n'.join([str(out_of_bailiwick_glue_record) for out_of_bailiwick_glue_record in self.out_of_bailiwick_glue_records])
         return answer_str
@@ -74,8 +75,14 @@ def parse_answer(domain, answer):
     name_servers = [strip_trailing_dot(entry.to_text()) for entry in answer]
     glue_records_ipv4 = [parse_a_record(a_record) for a_record in answer.response.additional if a_record.rdtype == 1]
     glue_records_ipv6 = [parse_a_record(a_record) for a_record in answer.response.additional if a_record.rdtype == 28]
-    out_of_bailiwick_glue_records = [glue_record for glue_record in glue_records_ipv4 if out_of_bailiwick_domain(domain, glue_record)]
-    return NSAnswer(domain, name_servers, glue_records_ipv4, out_of_bailiwick_glue_records)
+    out_of_bailiwick_glue_records_v4 = [glue_record for glue_record in glue_records_ipv4 if out_of_bailiwick_domain(domain, glue_record)]
+    out_of_bailiwick_glue_records_v6 = [glue_record for glue_record in glue_records_ipv6 if out_of_bailiwick_domain(domain, glue_record)]
+    return NSAnswer(domain,
+                    name_servers,
+                    glue_records_ipv4,
+                    glue_records_ipv6,
+                    out_of_bailiwick_glue_records_v4,
+                    out_of_bailiwick_glue_records_v6)
 
 
 def query_worker(domains, results, chunk_index):
@@ -87,13 +94,12 @@ def query_worker(domains, results, chunk_index):
     """
     resolver = dns.resolver.Resolver()
     # use this when running from resolver
-    resolver.nameservers = ["127.0.0.1"]
+    #resolver.nameservers = ["127.0.0.1"]
     for index, domain in enumerate(domains):
         try:
             answer = resolver.query(domain, NS_QUERY)
             results.append(parse_answer(domain, answer))
         except Exception as e:
-            #traceback.print_exc()
             print("FAILED TO QUERY DOMAIN " + domain + " ERROR: " + str(e))
         print("CHUNK " + str(chunk_index) + " queried " + str(index + 1) + " / " + str(len(domains)) + " domains")
 
@@ -128,20 +134,29 @@ def parse_domains_file(file_path):
             try:
                 domains.append(domain_entry[2])
             except Exception as e:
+                # could not read domain, just skip
                 continue
     return domains
 
 
 def dump_stats(answers, output_path):
     with open(output_path, mode='w', newline='') as csv_file:
-        fieldnames = ['domain_name', 'name_servers_count', 'glue_records_count', 'out_of_bailiwick_glue_records']
+        fieldnames = ['domain_name',
+                      'name_servers_count',
+                      'ipv4_glue_records_count',
+                      'ipv4_out_of_bailiwick_glue_records',
+                      'ipv6_glue_records_count',
+                      'ipv6_out_of_bailiwick_glue_records']
+
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         writer.writeheader()
         for answer in answers:
             writer.writerow({'domain_name': answer.domain,
                              'name_servers_count': len(answer.name_servers),
-                             'glue_records_count': len(answer.glue_records),
-                             'out_of_bailiwick_glue_records': len(answer.out_of_bailiwick_glue_records)})
+                             'ipv4_glue_records_count': len(answer.glue_records_v4),
+                             'ipv4_out_of_bailiwick_glue_records': len(answer.out_of_bailiwick_glue_records_v4),
+                             'ipv6_glue_records_count': len(answer.glue_records_v6),
+                             'ipv6_out_of_bailiwick_glue_records': len(answer.out_of_bailiwick_glue_records_v6)})
 
 
 def main():
