@@ -58,17 +58,19 @@ def parse_answer(domain, answer):
 
 
 def query_domains(domains):
+    print("querying " + str(len(domains)) + " domains")
     resolver = dns.resolver.Resolver()
     # use this when running from resolver
     #resolver.nameservers = ["127.0.0.1"]
     answers = []
-    for domain in domains:
+    for index, domain in enumerate(domains):
         try:
             answer = resolver.query(domain, NS_QUERY)
             answers.append(parse_answer(domain, answer))
         except Exception as e:
             traceback.print_exc()
             print("FAILED TO QUERY DOMAIN " + domain + " ERROR: " + str(e))
+        print("queried " + str(index) + " / " + str(len(domains)) + " domains")
 
     return answers
 
@@ -116,6 +118,14 @@ def main():
         domains_to_query += domains
 
     answers = query_domains(domains_to_query)
+    """
+     TODO
+     CDF name_servers_count
+     CDF glue_records_count
+     CDF out_of_bailiwick_glue_records
+     histogram of name_servers_count
+    """
+
     dump_stats(answers, r"c:\a\res.csv")
 
 
