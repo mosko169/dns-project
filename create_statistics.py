@@ -1,8 +1,8 @@
 import os
 import csv
-import sys
 import matplotlib.pyplot as plt
 import numpy as np
+import argparse
 
 
 def num_list_to_cdf(num_list):
@@ -58,8 +58,8 @@ def get_result(file_path):
     return ns_cnt, glue_cnt, out_of_bailiwick_cnt
 
 
-def create_ns_histogram(list, output_dir):
-    plt.hist(list, bins=max(list), color='#0504aa')
+def create_ns_histogram(counters_list, output_dir):
+    plt.hist(counters_list, bins=max(counters_list), color='#0504aa')
     plt.xlabel("Number of ns records")
     plt.ylabel("Count of occurrence")
     plt.title("Distribution of ns records count")
@@ -67,20 +67,24 @@ def create_ns_histogram(list, output_dir):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} input_file [out_dir]")
-        print("This program creates an histogram and cdf file relevant to our study")
-        print("if no output dir was given, current one will be used")
-        sys.exit(0)
-    elif len(sys.argv) == 2:
-        output_dir = os.getcwd()
+    parser = argparse.ArgumentParser(description='Output:\n' +
+                                                 'NS_HIST.png - Nameservers histogram\n' +
+                                                 'NS_CDF.png - Nameservers CDF\n' +
+                                                 'GLUE_CDF.png - Glue records CDF\n' +
+                                                 'OUT_OF_BAILIWICK_CDF.png - Out-of-bailiwick Glue records CDF', formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("-counters_file",
+                        help="path of output file of ns.py script (contains the counters gathered on the given domains)",
+                        required=True)
+    parser.add_argument("-output_dir", help="path of directory to output the plots", required=False)
+    args = parser.parse_args()
+    if args.output_path:
+        output_dir = args.output_dir
     else:
-        output_dir = sys.argv[2]
+        output_dir = os.getcwd()
 
-    ns_cnt, glue_cnt, out_of_bailiwick_cnt = get_result(sys.argv[1])
-
+    ns_cnt, glue_cnt, out_of_bailiwick_cnt = get_result(args.counters_file)
     create_ns_histogram(ns_cnt, output_dir)
-    for name, cnt_list in {"NS_CDF": ns_cnt, "GLUE_CDF": glue_cnt, "OUT_OF_BAILWICK": out_of_bailiwick_cnt}.items():
+    for name, cnt_list in {"NS_CDF": ns_cnt, "GLUE_CDF": glue_cnt, "OUT_OF_BAILIWICK": out_of_bailiwick_cnt}.items():
         create_cdf_graph(num_list_to_cdf(cnt_list), os.path.join(output_dir, name))
 
 

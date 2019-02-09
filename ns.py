@@ -178,14 +178,6 @@ def main():
         domains_to_query += domains
 
     answers = query_domains(domains_to_query)
-    """
-     TODO
-     CDF name_servers_count
-     CDF glue_records_count
-     CDF out_of_bailiwick_glue_records
-     histogram of name_servers_count
-    """
-
     dump_stats(answers, args.output_path)
 
 
