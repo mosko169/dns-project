@@ -2,10 +2,11 @@ import dns.resolver
 import csv
 import traceback
 import argparse
+import threading
 
 
 NS_QUERY = "NS"
-
+THREADS = 10
 
 class AAnswer:
     def __init__(self, name, ip_addr):
@@ -34,6 +35,18 @@ class NSAnswer:
         return answer_str
 
 
+def get_chunks(seq, num):
+    avg = len(seq) / float(num)
+    out = []
+    last = 0.0
+
+    while last < len(seq):
+        out.append(seq[int(last):int(last + avg)])
+        last += avg
+
+    return out
+
+
 def strip_trailing_dot(name):
     if name.endswith('.'):
         name = name[:-1]
@@ -57,22 +70,38 @@ def parse_answer(domain, answer):
     return NSAnswer(domain, name_servers, glue_records, out_of_bailiwick_glue_records)
 
 
+def iterate_domains(domains, results, chunk):
+    resolver = dns.resolver.Resolver()
+    for index, domain in enumerate(domains):
+        try:
+            answer = resolver.query(domain, NS_QUERY)
+            results.append(parse_answer(domain, answer))
+        except Exception as e:
+            #traceback.print_exc()
+            print("FAILED TO QUERY DOMAIN " + domain + " ERROR: " + str(e))
+        print("CHUNK " + str(chunk) + " queried " + str(index + 1) + " / " + str(len(domains)) + " domains")
+
+
 def query_domains(domains):
     print("querying " + str(len(domains)) + " domains")
     resolver = dns.resolver.Resolver()
     # use this when running from resolver
     #resolver.nameservers = ["127.0.0.1"]
-    answers = []
-    for index, domain in enumerate(domains):
-        try:
-            answer = resolver.query(domain, NS_QUERY)
-            answers.append(parse_answer(domain, answer))
-        except Exception as e:
-            traceback.print_exc()
-            print("FAILED TO QUERY DOMAIN " + domain + " ERROR: " + str(e))
-        print("queried " + str(index + 1) + " / " + str(len(domains)) + " domains")
+    chunks = get_chunks(domains, THREADS)
+    resolve_threads = []
+    answers_list = []
+    for index, chunk in enumerate(chunks):
+        answers = []
+        answers_list.append(answers)
+        resolve_thread = threading.Thread(target=iterate_domains, args=[chunk, answers, index])
+        resolve_thread.start()
+        resolve_threads.append(resolve_thread)
 
-    return answers
+    for t in resolve_threads:
+        t.join()
+    return [answer for answers in answers_list for answer in answers]
+
+
 
 def parse_domains_file(file_path):
     domains = []
