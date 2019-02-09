@@ -1,6 +1,7 @@
 import dns.resolver
 import csv
 import traceback
+import argparse
 
 
 NS_QUERY = "NS"
@@ -16,10 +17,11 @@ class AAnswer:
 
 
 class NSAnswer:
-    def __init__(self, domain, name_servers, glue_records):
+    def __init__(self, domain, name_servers, glue_records, out_of_bailiwick_glue_records):
         self.domain = domain
         self.name_servers = name_servers
         self.glue_records = glue_records
+        self.out_of_bailiwick_glue_records = out_of_bailiwick_glue_records
 
     def __str__(self):
         answer_str = "domain: " + self.domain
@@ -27,19 +29,32 @@ class NSAnswer:
         answer_str += '\n'.join(self.name_servers)
         answer_str += "\nglue records: \n"
         answer_str+= '\n'.join([str(glue_record) for glue_record in self.glue_records])
+        answer_str += "\nout of bailiwick glue records: \n"
+        answer_str+= '\n'.join([str(out_of_bailiwick_glue_record) for out_of_bailiwick_glue_record in self.out_of_bailiwick_glue_records])
         return answer_str
 
 
+def strip_trailing_dot(name):
+    if name.endswith('.'):
+        name = name[:-1]
+    return name
+
+
 def parse_a_record(a_record):
-    name = a_record.name.to_text()
+    name = strip_trailing_dot(a_record.name.to_text())
     ipAddr = a_record.items[0].to_text()
     return AAnswer(name, ipAddr)
 
 
+def out_of_bailiwick_domain(original_domain, subdomain):
+    return not subdomain.name.endswith(original_domain)
+
+
 def parse_answer(domain, answer):
-    nameservers = [entry.to_text() for entry in answer]
+    name_servers = [strip_trailing_dot(entry.to_text()) for entry in answer]
     glue_records = [parse_a_record(a_record) for a_record in answer.response.additional]
-    return NSAnswer(domain, nameservers, glue_records)
+    out_of_bailiwick_glue_records = [glue_record for glue_record in glue_records if out_of_bailiwick_domain(domain, glue_record)]
+    return NSAnswer(domain, name_servers, glue_records, out_of_bailiwick_glue_records)
 
 
 def query_domains(domains):
@@ -70,12 +85,39 @@ def parse_domains_file(file_path):
     return domains
 
 
+def dump_stats(answers, output_path):
+    with open(output_path, mode='w', newline='') as csv_file:
+        fieldnames = ['domain_name', 'name_servers_count', 'glue_records_count', 'out_of_bailiwick_glue_records']
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()
+        for answer in answers:
+            writer.writerow({'domain_name': answer.domain,
+                             'name_servers_count': len(answer.name_servers),
+                             'glue_records_count': len(answer.glue_records),
+                             'out_of_bailiwick_glue_records': len(answer.out_of_bailiwick_glue_records)})
+
+
 def main():
-    domains = ["google.com", "facebook.com", "microsoft.com"]
-    answers = query_domains(domains)
-    for answer in answers:
-        print("************\n\n")
-        print(answer)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-domains_file_path", help="path of domains file retrieved from https://majestic.com/reports/majestic-million", required=False)
+    parser.add_argument("-domains", help="a list of domains to perform queries on", nargs='+', required=False)
+    parser.add_argument("-output_path", help="path to write statistics to", required=True)
+    args = parser.parse_args()
+    domains = args.domains
+    domains_file_path = args.domains_file_path
+    if not (domains or domains_file_path):
+        parser.print_help()
+        exit(0)
+
+    domains_to_query = []
+    if domains_file_path:
+        domains_to_query += parse_domains_file(domains_file_path)
+    if domains:
+        domains_to_query += domains
+
+    answers = query_domains(domains_to_query)
+    dump_stats(answers, r"c:\a\res.csv")
+
 
 if __name__ == '__main__':
     main()
