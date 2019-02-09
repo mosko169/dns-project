@@ -70,7 +70,7 @@ def query_domains(domains):
         except Exception as e:
             traceback.print_exc()
             print("FAILED TO QUERY DOMAIN " + domain + " ERROR: " + str(e))
-        print("queried " + str(index) + " / " + str(len(domains)) + " domains")
+        print("queried " + str(index + 1) + " / " + str(len(domains)) + " domains")
 
     return answers
 
@@ -126,7 +126,7 @@ def main():
      histogram of name_servers_count
     """
 
-    dump_stats(answers, r"c:\a\res.csv")
+    dump_stats(answers, args.output_path)
 
 
 if __name__ == '__main__':
