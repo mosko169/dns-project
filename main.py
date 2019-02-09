@@ -6,7 +6,8 @@ import threading
 
 
 NS_QUERY = "NS"
-THREADS = 10
+THREADS = 20
+
 
 class AAnswer:
     def __init__(self, name, ip_addr):
@@ -59,19 +60,34 @@ def parse_a_record(a_record):
     return AAnswer(name, ipAddr)
 
 
-def out_of_bailiwick_domain(original_domain, subdomain):
-    return not subdomain.name.endswith(original_domain)
+def out_of_bailiwick_domain(original_domain, name_server):
+    """
+    checks whether a name server is in-bailiwick of a domain by validating
+    that their suffix is the same
+    :param original_domain: domain which to check its name server
+    :param name_server: name server to check
+    """
+    return not name_server.name.endswith(original_domain)
 
 
 def parse_answer(domain, answer):
     name_servers = [strip_trailing_dot(entry.to_text()) for entry in answer]
-    glue_records = [parse_a_record(a_record) for a_record in answer.response.additional]
-    out_of_bailiwick_glue_records = [glue_record for glue_record in glue_records if out_of_bailiwick_domain(domain, glue_record)]
-    return NSAnswer(domain, name_servers, glue_records, out_of_bailiwick_glue_records)
+    glue_records_ipv4 = [parse_a_record(a_record) for a_record in answer.response.additional if a_record.rdtype == 1]
+    glue_records_ipv6 = [parse_a_record(a_record) for a_record in answer.response.additional if a_record.rdtype == 28]
+    out_of_bailiwick_glue_records = [glue_record for glue_record in glue_records_ipv4 if out_of_bailiwick_domain(domain, glue_record)]
+    return NSAnswer(domain, name_servers, glue_records_ipv4, out_of_bailiwick_glue_records)
 
 
-def iterate_domains(domains, results, chunk):
+def query_worker(domains, results, chunk_index):
+    """
+    queries given domains for NS records and parses the answers
+    :param domains: domains to query
+    :param results: results vector to fill
+    :param chunk_index: index of domains chunk
+    """
     resolver = dns.resolver.Resolver()
+    # use this when running from resolver
+    resolver.nameservers = ["127.0.0.1"]
     for index, domain in enumerate(domains):
         try:
             answer = resolver.query(domain, NS_QUERY)
@@ -79,28 +95,28 @@ def iterate_domains(domains, results, chunk):
         except Exception as e:
             #traceback.print_exc()
             print("FAILED TO QUERY DOMAIN " + domain + " ERROR: " + str(e))
-        print("CHUNK " + str(chunk) + " queried " + str(index + 1) + " / " + str(len(domains)) + " domains")
+        print("CHUNK " + str(chunk_index) + " queried " + str(index + 1) + " / " + str(len(domains)) + " domains")
 
 
 def query_domains(domains):
+    """
+    perform NS queries for the given domains
+    :param domains: domains to query
+    """
     print("querying " + str(len(domains)) + " domains")
-    resolver = dns.resolver.Resolver()
-    # use this when running from resolver
-    #resolver.nameservers = ["127.0.0.1"]
-    chunks = get_chunks(domains, THREADS)
+    chunks = get_chunks(domains[:1], THREADS)
     resolve_threads = []
     answers_list = []
     for index, chunk in enumerate(chunks):
         answers = []
         answers_list.append(answers)
-        resolve_thread = threading.Thread(target=iterate_domains, args=[chunk, answers, index])
+        resolve_thread = threading.Thread(target=query_worker, args=[chunk, answers, index])
         resolve_thread.start()
         resolve_threads.append(resolve_thread)
 
     for t in resolve_threads:
         t.join()
     return [answer for answers in answers_list for answer in answers]
-
 
 
 def parse_domains_file(file_path):
