@@ -20,7 +20,7 @@ def num_list_to_cdf(num_list):
     return accumulate_percents
 
 
-def create_cdf_graph(cdf_list, output_path):
+def create_cdf_graph(cdf_list, labels, output_path):
     data = np.arange(0, len(cdf_list)+1)
     y = np.array(cdf_list)
 
@@ -39,7 +39,8 @@ def create_cdf_graph(cdf_list, output_path):
 
     ax.set_xlim(data[0], data[-1])
     ax.set_ylim([-0.01, 1.01])
-
+    plt.xlabel(labels[0])
+    plt.ylabel(labels[1])
     plt.savefig(output_path)
 
 
@@ -59,10 +60,15 @@ def get_result(file_path):
 
 
 def create_ns_histogram(counters_list, output_dir):
+    plt.figure(figsize=(12, 8))
     plt.hist(counters_list, bins=max(counters_list), color='#0504aa')
     plt.xlabel("Number of ns records")
     plt.ylabel("Count of occurrence")
     plt.title("Distribution of ns records count")
+    values = list(set(counters_list))
+    ax = plt.gca()
+    ax.xaxis.set_ticks(range(0, max(values), 2))
+    ax.set_xlim(auto=True)
     plt.savefig(os.path.join(output_dir, "NS_HIST.png"))
 
 
@@ -77,15 +83,15 @@ def main():
                         required=True)
     parser.add_argument("-output_dir", help="path of directory to output the plots", required=False)
     args = parser.parse_args()
-    if args.output_path:
+    if args.output_dir:
         output_dir = args.output_dir
     else:
         output_dir = os.getcwd()
 
     ns_cnt, glue_cnt, out_of_bailiwick_cnt = get_result(args.counters_file)
     create_ns_histogram(ns_cnt, output_dir)
-    for name, cnt_list in {"NS_CDF": ns_cnt, "GLUE_CDF": glue_cnt, "OUT_OF_BAILIWICK": out_of_bailiwick_cnt}.items():
-        create_cdf_graph(num_list_to_cdf(cnt_list), os.path.join(output_dir, name))
+    for stat in [("NS_CDF",("Number of name servers", "Percentage"), ns_cnt), ("GLUE_CDF", ("Number of glue records", "Percentage"), glue_cnt), ("OUT_OF_BAILIWICK", ("Number of Out-of-bailiwick glue records", "Percentage"), out_of_bailiwick_cnt)]:
+        create_cdf_graph(num_list_to_cdf(stat[2]), stat[1], os.path.join(output_dir, stat[0]))
 
 
 if __name__ == "__main__":

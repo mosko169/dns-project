@@ -1,4 +1,5 @@
 import dns.resolver
+from dns import rdatatype
 import csv
 import argparse
 import threading
@@ -33,7 +34,7 @@ class NSAnswer:
         answer_str += "\nglue records: \n"
         answer_str+= '\n'.join([str(glue_record) for glue_record in self.glue_records_v4])
         answer_str += "\nout of bailiwick glue records: \n"
-        answer_str+= '\n'.join([str(out_of_bailiwick_glue_record) for out_of_bailiwick_glue_record in self.out_of_bailiwick_glue_records])
+        answer_str+= '\n'.join([str(out_of_bailiwick_glue_record) for out_of_bailiwick_glue_record in self.out_of_bailiwick_glue_records_v4])
         return answer_str
 
 
@@ -73,8 +74,8 @@ def out_of_bailiwick_domain(original_domain, name_server):
 
 def parse_answer(domain, answer):
     name_servers = [strip_trailing_dot(entry.to_text()) for entry in answer]
-    glue_records_ipv4 = [parse_a_record(a_record) for a_record in answer.response.additional if a_record.rdtype == 1]
-    glue_records_ipv6 = [parse_a_record(a_record) for a_record in answer.response.additional if a_record.rdtype == 28]
+    glue_records_ipv4 = [parse_a_record(a_record) for a_record in answer.response.additional if a_record.rdtype == rdatatype.A]
+    glue_records_ipv6 = [parse_a_record(a_record) for a_record in answer.response.additional if a_record.rdtype == rdatatype.AAAA]
     out_of_bailiwick_glue_records_v4 = [glue_record for glue_record in glue_records_ipv4 if out_of_bailiwick_domain(domain, glue_record)]
     out_of_bailiwick_glue_records_v6 = [glue_record for glue_record in glue_records_ipv6 if out_of_bailiwick_domain(domain, glue_record)]
     return NSAnswer(domain,
@@ -94,7 +95,7 @@ def query_worker(domains, results, chunk_index):
     """
     resolver = dns.resolver.Resolver()
     # use this when running from resolver
-    #resolver.nameservers = ["127.0.0.1"]
+    resolver.nameservers = ["127.0.0.1"]
     for index, domain in enumerate(domains):
         try:
             answer = resolver.query(domain, NS_QUERY)
